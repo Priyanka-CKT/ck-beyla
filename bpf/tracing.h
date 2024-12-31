@@ -63,6 +63,11 @@ static __always_inline void make_tp_string(unsigned char *buf, const tp_info_t *
     *buf = (tp->flags == 0) ? '0' : '1';
 }
 
+static __always_inline void make_ck_string(unsigned char *buf, const tp_info_t *tp) {
+    // ck route id 
+    encode_hex(buf, tp->ckroute_id, CKR_ID_SIZE_BYTES);
+}
+
 static __always_inline void
 trace_key_from_conn(trace_map_key_t *key, connection_info_t *conn, u32 type) {
     key->conn = *conn;

@@ -112,7 +112,7 @@ int beyla_uprobe_server_handleStream(struct pt_regs *ctx) {
             bpf_dbg_printk("found t %llx", t);
             if (t) {
                 bpf_dbg_printk("reading the traceparent from frame headers");
-                if (valid_trace(t->tp.trace_id)) {
+                if (valid_trace(t->tp.trace_id) || valid_ckroute(t->tp.ckroute_id)) {
                     tp_ptr = &t->tp;
                 }
             }

@@ -243,6 +243,11 @@ int beyla_uprobe_http2Server_processHeaders(struct pt_regs *ctx) {
         bpf_map_update_elem(&http2_server_requests_tp, &g_key, &tp, BPF_ANY);
     }
 
+    if (valid_trace(tp.ckroute_id)) {
+        bpf_dbg_printk("found valid ckroute id in http2 headers");
+        bpf_map_update_elem(&http2_server_requests_tp, &g_key, &tp, BPF_ANY);
+    }
+
     return 0;
 }
 
