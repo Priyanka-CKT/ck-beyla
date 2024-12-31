@@ -837,8 +837,8 @@ int beyla_uprobe_http2FramerWriteHeaders(struct pt_regs *ctx) {
         http_func_invocation_t *info = bpf_map_lookup_elem(&ongoing_http_client_requests, &g_key);
 
         if (info) {
-            bpf_dbg_printk("Found func info %llx", info);
             void *goroutine_addr = GOROUTINE_PTR(ctx);
+            bpf_dbg_printk("Found func info %llx, goroutine_addr %lx", info, goroutine_addr);
 
             void *w_ptr = 0;
             bpf_probe_read(&w_ptr, sizeof(w_ptr), (void *)(framer + framer_w_pos + 8));

@@ -642,8 +642,9 @@ int beyla_uprobe_grpcFramerWriteHeaders(struct pt_regs *ctx) {
         bpf_map_lookup_elem(&ongoing_streams, &stream_lookup);
 
     if (invocation) {
-        bpf_dbg_printk("Found invocation info %llx", invocation);
         void *goroutine_addr = GOROUTINE_PTR(ctx);
+        bpf_dbg_printk(
+            "Found invocation info %llx, goroutine_addr %lx", invocation, goroutine_addr);
         go_addr_key_t g_key = {};
         go_addr_key_from_id(&g_key, goroutine_addr);
 
