@@ -36,12 +36,6 @@
 #define TP_MAX_VAL_LENGTH 55
 #define TP_MAX_KEY_LENGTH 11
 
-#define CKR_ID_CHAR_LEN 44
-#define CKR_ID_SIZE_BYTES 22
-//"ckroute" header key and value max lengths
-#define CKR_MAX_VAL_LENGTH 44
-#define CKR_MAX_KEY_LENGTH 7
-
 #define TCP_SEND 1
 #define TCP_RECV 0
 
@@ -94,7 +88,6 @@ typedef struct tp_info {
     unsigned char trace_id[TRACE_ID_SIZE_BYTES];
     unsigned char span_id[SPAN_ID_SIZE_BYTES];
     unsigned char parent_id[SPAN_ID_SIZE_BYTES];
-    unsigned char ckroute_id[CKR_ID_SIZE_BYTES]
     u64 ts;
     u8 flags;
 } tp_info_t;

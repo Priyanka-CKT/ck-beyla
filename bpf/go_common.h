@@ -25,7 +25,7 @@
 
 char __license[] SEC("license") = "Dual MIT/GPL";
 
-enum { W3C_KEY_LENGTH = 11, W3C_VAL_LENGTH = 55, CKR_KEY_LENGTH = 7, CKR_VAL_LENGTH = 44 };
+enum { W3C_KEY_LENGTH = 11, W3C_VAL_LENGTH = 55 };
 
 // Temporary information about a function invocation. It stores the invocation time of a function
 // as well as the value of registers at the invocation time. This way we can retrieve them at the
@@ -131,10 +131,6 @@ static __always_inline u8 valid_trace(const unsigned char *trace_id) {
     return *((u64 *)trace_id) != 0 || *((u64 *)(trace_id + 8)) != 0;
 }
 
-static __always_inline u8 valid_ckroute(const unsigned char *ckroute_id) {
-    return *((u64 *)ckroute_id) != 0;
-}
-
 static __always_inline void go_addr_key_from_id(go_addr_key_t *current, void *addr) {
     u64 pid_tid = bpf_get_current_pid_tgid();
     u32 pid = pid_from_pid_tgid(pid_tid);
@@ -192,19 +188,10 @@ static __always_inline void decode_go_traceparent(unsigned char *buf,
     decode_hex(flags, f_id, FLAGS_CHAR_LEN);
 }
 
-static __always_inline void decode_go_ckroute(unsigned char *buf,
-                                                  unsigned char *ckroute_id) {
-    unsigned char *ckr_id = buf ;
-    decode_hex(ckroute_id, ckr_id, CKR_ID_CHAR_LEN);
-}
-
-
-
 static __always_inline void tp_from_parent(tp_info_t *tp, tp_info_t *parent) {
     *((u64 *)tp->trace_id) = *((u64 *)parent->trace_id);
     *((u64 *)(tp->trace_id + 8)) = *((u64 *)(parent->trace_id + 8));
     *((u64 *)tp->parent_id) = *((u64 *)parent->span_id);
-    *((u64 *)tp->ckroute_id) = *((u64 *)parent->ckroute_id);
     tp->flags = parent->flags;
 }
 
@@ -213,7 +200,6 @@ static __always_inline void tp_clone(tp_info_t *dest, tp_info_t *src) {
     *((u64 *)(dest->trace_id + 8)) = *((u64 *)(src->trace_id + 8));
     *((u64 *)dest->span_id) = *((u64 *)src->span_id);
     *((u64 *)dest->parent_id) = *((u64 *)src->parent_id);
-    *((u64 *)dest->ckroute_id) = *((u64 *)src->ckroute_id);
     dest->flags = src->flags;
 }
 
@@ -260,7 +246,6 @@ server_trace_parent(void *goroutine_addr, tp_info_t *tp, tp_info_t *found_tp) {
         if (!found_info) {
             bpf_dbg_printk("No traceparent/ckroute in headers, generating");
             urand_bytes(tp->trace_id, TRACE_ID_SIZE_BYTES);
-            urand_bytes(tp->ckroute_id, CKR_ID_SIZE_BYTES);
             *((u64 *)tp->parent_id) = 0;
         }
     }
@@ -271,10 +256,6 @@ server_trace_parent(void *goroutine_addr, tp_info_t *tp, tp_info_t *found_tp) {
     unsigned char tp_buf[TP_MAX_VAL_LENGTH];
     make_tp_string(tp_buf, tp);
     bpf_dbg_printk("tp: %s", tp_buf);
-
-    unsigned char ck_buf[CKR_MAX_VAL_LENGTH];
-    make_ck_string(ck_buf, tp);
-    bpf_dbg_printk("ck: %s", ck_buf);
 }
 
 static __always_inline u8 client_trace_parent(void *goroutine_addr, tp_info_t *tp_i) {
@@ -312,7 +293,6 @@ static __always_inline u8 client_trace_parent(void *goroutine_addr, tp_info_t *t
             tp_from_parent(tp_i, tp);
         } else {
             urand_bytes(tp_i->trace_id, TRACE_ID_SIZE_BYTES);
-            urand_bytes(tp_i->ckroute_id, CKR_ID_SIZE_BYTES);
         }
 
         urand_bytes(tp_i->span_id, SPAN_ID_SIZE_BYTES);
@@ -452,17 +432,6 @@ static __always_inline void process_meta_frame_headers(void *frame, tp_info_t *t
                     //bpf_dbg_printk("found grpc traceparent header");
                     bpf_probe_read(&temp, W3C_VAL_LENGTH, field.val_ptr);
                     decode_go_traceparent(temp, tp->trace_id, tp->parent_id, &tp->flags);
-                    break;
-                }
-            }
-            if (field.key_len == CKR_KEY_LENGTH && field.val_len == CKR_VAL_LENGTH) {
-                u8 temp[CKR_VAL_LENGTH];
-
-                bpf_probe_read(&temp, CKR_KEY_LENGTH, field.key_ptr);
-                if (!bpf_memicmp((const char *)temp, "ckroute", CKR_KEY_LENGTH)) {
-                    bpf_probe_read(&temp, CKR_VAL_LENGTH, field.val_ptr);
-                    bpf_dbg_printk("found grpc ckroute header %s", temp);
-                    decode_go_ckroute(temp, tp->ckroute_id);
                     break;
                 }
             }
