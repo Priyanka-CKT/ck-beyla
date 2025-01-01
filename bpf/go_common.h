@@ -25,7 +25,7 @@
 
 char __license[] SEC("license") = "Dual MIT/GPL";
 
-enum { W3C_KEY_LENGTH = 11, W3C_VAL_LENGTH = 55 };
+enum { W3C_KEY_LENGTH = 11, W3C_VAL_LENGTH = 55, CKR_KEY_LENGTH = 8, CKR_VAL_LENGTH = 32 };
 
 // Temporary information about a function invocation. It stores the invocation time of a function
 // as well as the value of registers at the invocation time. This way we can retrieve them at the
@@ -172,20 +172,10 @@ static __always_inline u64 find_parent_goroutine(go_addr_key_t *current) {
     return 0;
 }
 
-static __always_inline void decode_go_traceparent(unsigned char *buf,
-                                                  unsigned char *trace_id,
-                                                  unsigned char *span_id,
-                                                  unsigned char *flags) {
-    unsigned char *t_id = buf + 2 + 1; // strlen(ver) + strlen("-")
-    unsigned char *s_id =
-        buf + 2 + 1 + 32 + 1; // strlen(ver) + strlen("-") + strlen(trace_id) + strlen("-")
-    unsigned char *f_id =
-        buf + 2 + 1 + 32 + 1 + 16 +
-        1; // strlen(ver) + strlen("-") + strlen(trace_id) + strlen("-") + strlen(span_id) + strlen("-")
+static __always_inline void decode_go_ckroute(unsigned char *buf, unsigned char *ckroute_id) {
+    unsigned char *t_id = buf;
 
-    decode_hex(trace_id, t_id, TRACE_ID_CHAR_LEN);
-    decode_hex(span_id, s_id, SPAN_ID_CHAR_LEN);
-    decode_hex(flags, f_id, FLAGS_CHAR_LEN);
+    decode_hex(ckroute_id, t_id, CKROUTE_ID_CHAR_LEN);
 }
 
 static __always_inline void tp_from_parent(tp_info_t *tp, tp_info_t *parent) {
@@ -244,7 +234,7 @@ server_trace_parent(void *goroutine_addr, tp_info_t *tp, tp_info_t *found_tp) {
         }
 
         if (!found_info) {
-            bpf_dbg_printk("No traceparent/ckroute in headers, generating");
+            bpf_dbg_printk("[TODO]No ckroute in headers, generating");
             urand_bytes(tp->trace_id, TRACE_ID_SIZE_BYTES);
             *((u64 *)tp->parent_id) = 0;
         }
@@ -253,7 +243,7 @@ server_trace_parent(void *goroutine_addr, tp_info_t *tp, tp_info_t *found_tp) {
     urand_bytes(tp->span_id, SPAN_ID_SIZE_BYTES);
     bpf_map_update_elem(&go_trace_map, &g_key, tp, BPF_ANY);
 
-    unsigned char tp_buf[TP_MAX_VAL_LENGTH];
+    unsigned char tp_buf[CKR_MAX_VAL_LENGTH];
     make_tp_string(tp_buf, tp);
     bpf_dbg_printk("tp: %s", tp_buf);
 }
@@ -292,6 +282,7 @@ static __always_inline u8 client_trace_parent(void *goroutine_addr, tp_info_t *t
             bpf_dbg_printk("Found parent request trace_parent %llx", tp);
             tp_from_parent(tp_i, tp);
         } else {
+            bpf_dbg_printk("[TODO] Genrating trace id");
             urand_bytes(tp_i->trace_id, TRACE_ID_SIZE_BYTES);
         }
 
@@ -424,14 +415,14 @@ static __always_inline void process_meta_frame_headers(void *frame, tp_info_t *t
             bpf_probe_read(&field, sizeof(grpc_header_field_t), field_ptr);
             //bpf_dbg_printk("grpc header %s:%s", field.key_ptr, field.val_ptr);
             //bpf_dbg_printk("grpc sizes %d:%d", field.key_len, field.val_len);
-            if (field.key_len == W3C_KEY_LENGTH && field.val_len == W3C_VAL_LENGTH) {
-                u8 temp[W3C_VAL_LENGTH];
+            if (field.key_len == CKR_KEY_LENGTH && field.val_len == CKR_VAL_LENGTH) {
+                u8 temp[CKR_VAL_LENGTH];
 
-                bpf_probe_read(&temp, W3C_KEY_LENGTH, field.key_ptr);
-                if (!bpf_memicmp((const char *)temp, "traceparent", W3C_KEY_LENGTH)) {
+                bpf_probe_read(&temp, CKR_KEY_LENGTH, field.key_ptr);
+                if (!bpf_memicmp((const char *)temp, "ck-route", CKR_KEY_LENGTH)) {
                     //bpf_dbg_printk("found grpc traceparent header");
-                    bpf_probe_read(&temp, W3C_VAL_LENGTH, field.val_ptr);
-                    decode_go_traceparent(temp, tp->trace_id, tp->parent_id, &tp->flags);
+                    bpf_probe_read(&temp, CKR_VAL_LENGTH, field.val_ptr);
+                    decode_go_ckroute(temp, tp->trace_id);
                     break;
                 }
             }

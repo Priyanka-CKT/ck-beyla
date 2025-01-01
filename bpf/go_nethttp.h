@@ -254,8 +254,8 @@ int beyla_uprobe_readContinuedLineSliceReturns(struct pt_regs *ctx) {
     u64 len = (u64)GO_PARAM2(ctx);
     u8 *buf = (u8 *)GO_PARAM1(ctx);
 
-    if (len >= (W3C_KEY_LENGTH + W3C_VAL_LENGTH + 2)) {
-        u8 temp[W3C_KEY_LENGTH + W3C_VAL_LENGTH + 2];
+    if (len >= (CKR_KEY_LENGTH + CKR_VAL_LENGTH + 2)) {
+        u8 temp[CKR_KEY_LENGTH + CKR_VAL_LENGTH + 2];
         bpf_probe_read(temp, sizeof(temp), buf);
         bpf_dbg_printk("goroutine_addr %lx", goroutine_addr);
         go_addr_key_t g_key = {};
@@ -263,11 +263,10 @@ int beyla_uprobe_readContinuedLineSliceReturns(struct pt_regs *ctx) {
 
         connection_info_t *existing = bpf_map_lookup_elem(&ongoing_server_connections, &g_key);
         if (existing) {
-            if (!bpf_memicmp((const char *)temp, "traceparent: ", W3C_KEY_LENGTH + 2)) {
+            if (!bpf_memicmp((const char *)temp, "ck-route: ", CKR_KEY_LENGTH + 2)) {
                 server_http_func_invocation_t inv = {};
-                decode_go_traceparent(
-                    temp + W3C_KEY_LENGTH + 2, inv.tp.trace_id, inv.tp.parent_id, &inv.tp.flags);
-                bpf_dbg_printk("Found traceparent in header %s", temp);
+                decode_go_ckroute(temp + CKR_KEY_LENGTH + 2, inv.tp.trace_id);
+                bpf_dbg_printk("Found ck-route in header %s", temp);
                 bpf_map_update_elem(&ongoing_http_server_requests, &g_key, &inv, BPF_ANY);
             }
         }
@@ -304,7 +303,7 @@ int beyla_uprobe_ServeHTTPReturns(struct pt_regs *ctx) {
         }
     }
 
-    unsigned char tp_buf[TP_MAX_VAL_LENGTH];
+    unsigned char tp_buf[CKR_MAX_VAL_LENGTH];
     make_tp_string(tp_buf, &invocation->tp);
     bpf_dbg_printk("tp: %s", tp_buf);
 
@@ -508,7 +507,7 @@ int beyla_uprobe_roundTripReturn(struct pt_regs *ctx) {
 
     trace->tp = invocation->tp;
 
-    unsigned char tp_buf[TP_MAX_VAL_LENGTH];
+    unsigned char tp_buf[CKR_MAX_VAL_LENGTH];
     make_tp_string(tp_buf, &invocation->tp);
     bpf_dbg_printk("tp: %s", tp_buf);
     bpf_dbg_printk("method: %s", trace->method);
@@ -558,7 +557,7 @@ int beyla_uprobe_writeSubset(struct pt_regs *ctx) {
         goto done;
     }
 
-    unsigned char buf[TRACEPARENT_LEN];
+    unsigned char buf[CKR_MAX_VAL_LENGTH];
 
     make_tp_string(buf, &func_inv->tp);
 
@@ -582,13 +581,13 @@ int beyla_uprobe_writeSubset(struct pt_regs *ctx) {
     bpf_dbg_printk("buf_ptr %llx, len=%d, size=%d", (void *)buf_ptr, len, size);
 
     if (len <
-        (size - TP_MAX_VAL_LENGTH - TP_MAX_KEY_LENGTH - 4)) { // 4 = strlen(":_") + strlen("\r\n")
-        char key[TP_MAX_KEY_LENGTH + 2] = "Traceparent: ";
+        (size - CKR_MAX_VAL_LENGTH - CKR_MAX_KEY_LENGTH - 4)) { // 4 = strlen(":_") + strlen("\r\n")
+        char key[CKR_MAX_KEY_LENGTH + 2] = "ck-route: ";
         char end[2] = "\r\n";
         bpf_probe_write_user(buf_ptr + (len & 0x0ffff), key, sizeof(key));
-        len += TP_MAX_KEY_LENGTH + 2;
+        len += CKR_MAX_KEY_LENGTH + 2;
         bpf_probe_write_user(buf_ptr + (len & 0x0ffff), buf, sizeof(buf));
-        len += TP_MAX_VAL_LENGTH;
+        len += CKR_MAX_VAL_LENGTH;
         bpf_probe_write_user(buf_ptr + (len & 0x0ffff), end, sizeof(end));
         len += 2;
         bpf_probe_write_user(
@@ -883,7 +882,7 @@ int beyla_uprobe_http2FramerWriteHeaders(struct pt_regs *ctx) {
 
 #ifndef NO_HEADER_PROPAGATION
 #define HTTP2_ENCODED_HEADER_LEN                                                                   \
-    66 // 1 + 1 + 8 + 1 + 55 = type byte + hpack_len_as_byte("traceparent") + strlen(hpack("traceparent")) + len_as_byte(55) + generated traceparent id
+    43 // 1 + 1 + 8 + 1 + 32 = type byte + hpack_len_as_byte("ck-route") + strlen(hpack("ck-route")) + len_as_byte(32) + generated ck-route id
 
 SEC("uprobe/http2FramerWriteHeaders_returns")
 int beyla_uprobe_http2FramerWriteHeaders_returns(struct pt_regs *ctx) {
@@ -925,11 +924,11 @@ int beyla_uprobe_http2FramerWriteHeaders_returns(struct pt_regs *ctx) {
 
             //bpf_dbg_printk("Found f_info, this is the place to write to w = %llx, buf=%llx, n=%lld, size=%lld", w_ptr, buf_arr, n, cap);
             if (buf_arr && n < (cap - HTTP2_ENCODED_HEADER_LEN)) {
-                uint8_t tp_str[TP_MAX_VAL_LENGTH];
+                uint8_t tp_str[CKR_MAX_VAL_LENGTH];
 
                 u8 type_byte = 0;
-                u8 key_len = TP_ENCODED_LEN | 0x80; // high tagged to signify hpack encoded value
-                u8 val_len = TP_MAX_VAL_LENGTH;
+                u8 key_len = CKR_ENCODED_LEN | 0x80; // high tagged to signify hpack encoded value
+                u8 val_len = CKR_MAX_VAL_LENGTH;
 
                 // We don't hpack encode the value of the traceparent field, because that will require that
                 // we use bpf_loop, which in turn increases the kernel requirement to 5.17+.
@@ -942,14 +941,14 @@ int beyla_uprobe_http2FramerWriteHeaders_returns(struct pt_regs *ctx) {
                 bpf_probe_write_user(buf_arr + (n & 0x0ffff), &key_len, sizeof(key_len));
                 n++;
                 // Write 'traceparent' encoded as hpack
-                bpf_probe_write_user(buf_arr + (n & 0x0ffff), tp_encoded, sizeof(tp_encoded));
+                bpf_probe_write_user(buf_arr + (n & 0x0ffff), ckr_encoded, sizeof(ckr_encoded));
                 ;
-                n += TP_ENCODED_LEN;
+                n += CKR_ENCODED_LEN;
                 // Write the length of the hpack encoded traceparent field
                 bpf_probe_write_user(buf_arr + (n & 0x0ffff), &val_len, sizeof(val_len));
                 n++;
                 bpf_probe_write_user(buf_arr + (n & 0x0ffff), tp_str, sizeof(tp_str));
-                n += TP_MAX_VAL_LENGTH;
+                n += CKR_MAX_VAL_LENGTH;
                 // Update the value of n in w to reflect the new size
                 bpf_probe_write_user((void *)(w_ptr + io_writer_n_pos), &n, sizeof(n));
 

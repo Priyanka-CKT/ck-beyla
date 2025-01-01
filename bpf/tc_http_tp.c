@@ -195,45 +195,27 @@ error:
 
 static __always_inline void
 make_tp_string_skb(unsigned char *buf, const tp_info_t *tp, const unsigned char *end) {
-    buf = check_pkt_access(buf, EXTEND_SIZE, end);
+    buf = check_pkt_access(buf, CKR_EXTEND_SIZE, end);
 
     if (!buf) {
         return;
     }
 
-    *buf++ = 'T';
-    *buf++ = 'r';
-    *buf++ = 'a';
     *buf++ = 'c';
-    *buf++ = 'e';
-    *buf++ = 'p';
-    *buf++ = 'a';
+    *buf++ = 'k';
+    *buf++ = '-';
     *buf++ = 'r';
-    *buf++ = 'e';
-    *buf++ = 'n';
+    *buf++ = 'o';
+    *buf++ = 'u';
     *buf++ = 't';
+    *buf++ = 'e';
     *buf++ = ':';
     *buf++ = ' ';
-
-    // Version
-    *buf++ = '0';
-    *buf++ = '0';
-    *buf++ = '-';
 
     // Trace ID
     encode_hex_skb(buf, tp->trace_id, TRACE_ID_SIZE_BYTES);
     buf += TRACE_ID_CHAR_LEN;
 
-    *buf++ = '-';
-
-    // SpanID
-    encode_hex_skb(buf, tp->span_id, SPAN_ID_SIZE_BYTES);
-    buf += SPAN_ID_CHAR_LEN;
-
-    *buf++ = '-';
-
-    *buf++ = '0';
-    *buf++ = (tp->flags == 0) ? '0' : '1';
     *buf++ = '\r';
     *buf++ = '\n';
 }

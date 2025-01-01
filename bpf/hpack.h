@@ -59,14 +59,18 @@ uint8_t huffman_code_len[256] = {
 #define EOS_PAD_BYTE (EOS_CODE >> (EOS_N_BITS - 8))
 
 #define TP_ENCODED_LEN 8
+#define CKR_ENCODED_LEN 8
 
 static unsigned char tp_encoded[TP_ENCODED_LEN] = {
     0x4d, 0x83, 0x21, 0x6b, 0x1d, 0x85, 0xa9, 0x3f}; // hpack encoded "traceparent"
 
+static unsigned char ckr_encoded[TP_ENCODED_LEN] = {
+    0xee, 0xbf, 0xf8, 0xfc, 0xd7, 0xdd, 0xf2, 0xe8}; // hpack encoded "ck-route"
+
 struct hpack_ctx {
-    uint8_t dst[TP_MAX_VAL_LENGTH];
+    uint8_t dst[CKR_MAX_VAL_LENGTH];
     int32 dst_len;
-    uint8_t src[TP_MAX_VAL_LENGTH];
+    uint8_t src[CKR_MAX_VAL_LENGTH];
     uint64_t m_bytes;
     uint32_t m_count;
     int32 len;
@@ -75,12 +79,12 @@ struct hpack_ctx {
 static int encode_iter(u32 index, struct hpack_ctx *d) {
     int len = d->len;
 
-    if (len >= (TP_MAX_VAL_LENGTH - 4)) {
+    if (len >= (CKR_MAX_VAL_LENGTH - 4)) {
         d->len = -1;
         return 1;
     }
 
-    if (index >= TP_MAX_VAL_LENGTH) {
+    if (index >= CKR_MAX_VAL_LENGTH) {
         return 1;
     }
 
@@ -103,7 +107,7 @@ static int encode_iter(u32 index, struct hpack_ctx *d) {
 }
 
 static __always_inline int32_t hpack_encode_tp(struct hpack_ctx *d) {
-    uint32_t nr_loops = TP_MAX_VAL_LENGTH;
+    uint32_t nr_loops = CKR_MAX_VAL_LENGTH;
 
     bpf_loop(nr_loops, encode_iter, d, 0);
 
@@ -113,7 +117,7 @@ static __always_inline int32_t hpack_encode_tp(struct hpack_ctx *d) {
         return -1;
     }
 
-    if (len > (TP_MAX_VAL_LENGTH - 4)) {
+    if (len > (CKR_MAX_VAL_LENGTH - 4)) {
         return -1;
     }
 

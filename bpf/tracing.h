@@ -43,24 +43,9 @@ struct {
 } outgoing_trace_map SEC(".maps");
 
 static __always_inline void make_tp_string(unsigned char *buf, const tp_info_t *tp) {
-    // Version
-    *buf++ = '0';
-    *buf++ = '0';
-    *buf++ = '-';
 
-    // TraceID
+    // TraceID holding ckroute id
     encode_hex(buf, tp->trace_id, TRACE_ID_SIZE_BYTES);
-    buf += TRACE_ID_CHAR_LEN;
-    *buf++ = '-';
-
-    // SpanID
-    encode_hex(buf, tp->span_id, SPAN_ID_SIZE_BYTES);
-    buf += SPAN_ID_CHAR_LEN;
-    *buf++ = '-';
-
-    // Flags
-    *buf++ = '0';
-    *buf = (tp->flags == 0) ? '0' : '1';
 }
 
 static __always_inline void
